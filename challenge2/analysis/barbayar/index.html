@@ -1,0 +1,249 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="en">
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <title>Challenge 2</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/bootstrap-theme.min.css">
+</head>
+
+<body>
+    <div>
+        <div class="col-xs-12">
+            <h1 class="page-header">Challenge 2</h1>
+        </div>
+        <div class="col-xs-10">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    Area chart
+                </div>
+                <div class="panel-body">
+                    <div id="1DayChart" style="width: 100%; height: 500px;"></div>
+                    <div id="30MinutesChart" style="width: 100%; height: 500px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xs-2">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    Cluster chart
+                </div>
+                <div class="panel-body">
+                    <div id="1DayGaugeChart" style="width: 100%; height: 500px;"></div>
+                    <div id="1DayPieChart" style="width: 100%; height: 500px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/jquery-1.11.0.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+    <script type="text/javascript" src="https://www.google.com/jsapi"></script>
+    <script type="text/javascript">
+
+    var _30MinutesChart = null;
+    var _1DayGaugeChart = null;
+    var _1DayPieChart = null;
+    var _1DayChart = null;
+    var _data = [];
+    var _currentRow = 0;
+
+    function _loadData() {
+        var dataPath = 'data/total_watt.json';
+
+        var jqXHR = $.ajax(
+            {
+                url: dataPath,
+                async: false,
+                dataType: 'json'
+            }
+        ).done(
+            function(response, textStatus, jqXHR) {
+                var currentDate = '';
+                var currentIndex = -1;
+                var dayAverage = 0;
+
+                for (var i = 0; i < response.length; i++) {
+                    var time = response[i]['time'].split(' ');
+                    var date = time[0];
+                    var hour = time[1];
+
+                    if (date !== currentDate) {
+                        _data.push({
+                            date: date,
+                            data: []
+                        })
+
+                        currentDate = date;
+                        currentIndex++;
+                    }
+
+                    _data[currentIndex].data.push({
+                        hour: hour,
+                        data: response[i]['value']
+                    });
+                }
+
+                // calculates daily average
+                for (var i = 0; i < _data.length; i++) {
+                    var dailyData = _data[i].data;
+                    var total = 0;
+
+                    for (var j = 0; j < dailyData.length; j++) {
+                        total += dailyData[j].data;
+                    }
+
+                    _data[i]['average'] = total / dailyData.length;
+                }
+
+                _drawCharts();
+            }
+        ).fail(
+            function(jqXHR, textStatus, errorThrown) {
+                alert('Couldn\'t find the data file. It\'s because you open this page from your hard drive. It will redirect automatically to "http://barbayar.net/challenge2/"');
+                window.location = 'http://barbayar.net/challenge2/';
+            }
+        );
+    }
+
+    function _draw30MinutesChart(data) {
+        var googleChartData = [['Time', '30 minutes']];
+
+        for (var i = 0; i < data['data'].length; i++) {
+            googleChartData.push([data['data'][i]['hour'], data['data'][i]['data']]);
+        }
+
+        var dataTable = google.visualization.arrayToDataTable(googleChartData);
+
+        var options = {
+            title: 'Electricity by 30 minutes (' + data['date'] + ')',
+            hAxis: {title: 'Hour', titleTextStyle: {color: '#333'}},
+            vAxis: {title: 'Electricity (Watt)', minValue: 0},
+            legend: {position: 'none'},
+            animation: {duration: 500, easing: 'out'}
+        };
+
+        if (_30MinutesChart === null) {
+            _30MinutesChart = new google.visualization.AreaChart(document.getElementById('30MinutesChart'));
+        }
+
+        _30MinutesChart.draw(dataTable, options);
+    }
+
+    function _draw1DayGaugeChart(data) {
+        var googleChartData = [
+            ['Label', 'Value'],
+            ['Electricity', Math.floor(data['average'])]
+        ];
+        var dataTable = google.visualization.arrayToDataTable(googleChartData);
+
+        var options = {
+            redFrom: 1000, redTo: 1600,
+            yellowFrom: 600, yellowTo: 1000,
+            max: 1600
+        };
+
+        if (_1DayGaugeChart === null) {
+            _1DayGaugeChart = new google.visualization.Gauge(document.getElementById('1DayGaugeChart'));
+        }
+
+        _1DayGaugeChart.draw(dataTable, options);
+    }
+
+    function _draw1DayPieChart(data) {
+        var low = 0, medium = 0, high = 0;
+        for (var i = 0; i < data['data'].length; i++) {
+            if (data['data'][i]['data'] < 600) {
+                low++;
+            } else if (data['data'][i]['data'] < 1000) {
+                medium++;
+            } else {
+                high++;
+            }
+        }
+
+        var googleChartData = [
+            ['Level', 'Count'],
+            ['Low (0 ~ 600)', low],
+            ['Medium (600 ~ 1000)', medium],
+            ['High (1000 ~ 1600)', high]
+        ];
+        var dataTable = google.visualization.arrayToDataTable(googleChartData);
+
+        var options = {
+            legend: {position: 'none'},
+            slices: {
+                0: {color: 'darkgreen'},
+                1: {color: 'orange'},
+                2: {color: 'darkred'}
+            }
+        };
+
+        if (_1DayPieChart === null) {
+            _1DayPieChart = new google.visualization.PieChart(document.getElementById('1DayPieChart'));
+        }
+
+        _1DayPieChart.draw(dataTable, options);
+    }
+
+    function _draw1DayChart(data) {
+        var googleChartData = [['Time', '1 Day']];
+
+        for (var i = 0; i < data.length; i++) {
+            googleChartData.push([data[i]['date'], data[i]['average']]);
+        }
+
+        var dataTable = google.visualization.arrayToDataTable(googleChartData);
+
+        var options = {
+            title: 'Electricity by 1 day average',
+            hAxis: {title: 'Date', titleTextStyle: {color: '#333'}},
+            vAxis: {title: 'Electricity (Watt)', minValue: 0},
+            legend: {position: 'none'}
+        };
+
+        _1DayChart = new google.visualization.AreaChart(document.getElementById('1DayChart'));
+        _1DayChart.draw(dataTable, options);
+        google.visualization.events.addListener(_1DayChart, 'onmouseover', function(index) {
+            _currentRow = index.row;
+            _draw30MinutesChart(data[_currentRow]);
+            _draw1DayGaugeChart(data[_currentRow]);
+            _draw1DayPieChart(data[_currentRow]);
+        });
+    }
+
+    function _drawNextRow()
+    {
+        _currentRow++;
+
+        if (!_data[_currentRow]) {
+            _currentRow = 0;
+        }
+
+        _1DayChart.setSelection([{row: _currentRow}, {row: _currentRow}]);
+        _draw30MinutesChart(_data[_currentRow]);
+        _draw1DayGaugeChart(_data[_currentRow]);
+        _draw1DayPieChart(_data[_currentRow]);
+    }
+
+    function _drawCharts()
+    {
+        _draw1DayChart(_data);
+
+        _1DayChart.setSelection([{row: _currentRow}, {row: _currentRow}]);
+        _draw30MinutesChart(_data[_currentRow]);
+        _draw1DayGaugeChart(_data[_currentRow]);
+        _draw1DayPieChart(_data[_currentRow]);
+    }
+
+    google.load('visualization', '1', {packages:['corechart', 'gauge']});
+    google.setOnLoadCallback(function() {
+        _loadData();
+    });
+
+    setInterval(_drawNextRow, 2000);
+    </script>
+</body>
+
+</html>
